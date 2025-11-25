@@ -1,8 +1,8 @@
 #![no_std]
 
+use defmt::Format;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::i2c::I2c;
-use defmt::Format;
 
 pub mod error;
 use crate::error::SoilMoistureSensorError;
@@ -147,12 +147,12 @@ pub struct Reading {
     pub moisture: u16,
 }
 
-impl<I2C, D> SoilSensor<I2C, D>
+impl<I2C, D, E> SoilSensor<I2C, D>
 where
-    I2C: embedded_hal_async::i2c::I2c,
+    I2C: embedded_hal_async::i2c::I2c<Error = E>,
     D: DelayNs,
 {
-    pub async fn temperature_async(&mut self) -> Result<f32, SoilMoistureSensorError> {
+    pub async fn temperature_async(&mut self) -> Result<f32, SoilMoistureSensorError<E>> {
         let mut buffer = [0; 4];
         self.i2c_read_async(&[0x00, 0x04], &mut buffer, self.temp_delay)
             .await?;
@@ -163,14 +163,14 @@ where
         })
     }
 
-    pub async fn moisture_async(&mut self) -> Result<u16, SoilMoistureSensorError> {
+    pub async fn moisture_async(&mut self) -> Result<u16, SoilMoistureSensorError<E>> {
         let mut buffer = [0; 2];
         self.i2c_read_async(&[0x0F, 0x10], &mut buffer, self.moisture_delay)
             .await?;
         Ok(u16::from_be_bytes(buffer))
     }
 
-    pub async fn read_async(&mut self) -> Result<Reading, SoilMoistureSensorError> {
+    pub async fn read_async(&mut self) -> Result<Reading, SoilMoistureSensorError<E>> {
         Ok(Reading {
             temperature: self.temperature_async().await?,
             moisture: self.moisture_async().await?,
@@ -182,11 +182,10 @@ where
         bytes: &[u8],
         buffer: &mut [u8],
         delay_ns: u32,
-    ) -> Result<(), SoilMoistureSensorError> {
-        self.i2c
-            .write(self.address, bytes)
-            .await
-            .map_err(|_| SoilMoistureSensorError::WriteI2CError)?;
+    ) -> Result<(), SoilMoistureSensorError<E>> {
+        if let Err(i2c_err) = self.i2c.write(self.address, bytes).await {
+            return Err(SoilMoistureSensorError::WriteI2CError(i2c_err));
+        }
         self.delay.delay_ns(delay_ns);
         self.i2c
             .read(self.address, buffer)
@@ -195,12 +194,12 @@ where
     }
 }
 
-impl<I2C, D> SoilSensor<I2C, D>
+impl<I2C, D, E> SoilSensor<I2C, D>
 where
-    I2C: I2c + Send + Sync,
+    I2C: I2c<Error = E> + Send + Sync,
     D: DelayNs,
 {
-    pub fn temperature(&mut self) -> Result<f32, SoilMoistureSensorError> {
+    pub fn temperature(&mut self) -> Result<f32, SoilMoistureSensorError<E>> {
         let mut buffer = [0; 4];
         self.i2c_read(&[0x00, 0x04], &mut buffer, self.temp_delay)?;
         let raw = i32::from_be_bytes(buffer) as f32;
@@ -210,13 +209,13 @@ where
         })
     }
 
-    pub fn moisture(&mut self) -> Result<u16, SoilMoistureSensorError> {
+    pub fn moisture(&mut self) -> Result<u16, SoilMoistureSensorError<E>> {
         let mut buffer = [0; 2];
         self.i2c_read(&[0x0F, 0x10], &mut buffer, self.moisture_delay)?;
         Ok(u16::from_be_bytes(buffer))
     }
 
-    pub fn read(&mut self) -> Result<Reading, SoilMoistureSensorError> {
+    pub fn read(&mut self) -> Result<Reading, SoilMoistureSensorError<E>> {
         Ok(Reading {
             temperature: self.temperature()?,
             moisture: self.moisture()?,
@@ -228,10 +227,10 @@ where
         bytes: &[u8],
         buffer: &mut [u8],
         delay_ns: u32,
-    ) -> Result<(), SoilMoistureSensorError> {
-        self.i2c
-            .write(self.address, bytes)
-            .map_err(|_| SoilMoistureSensorError::WriteI2CError)?;
+    ) -> Result<(), SoilMoistureSensorError<E>> {
+        if let Err(i2c_err) = self.i2c.write(self.address, bytes) {
+            return Err(SoilMoistureSensorError::WriteI2CError(i2c_err));
+        }
         self.delay.delay_ns(delay_ns);
         self.i2c
             .read(self.address, buffer)
