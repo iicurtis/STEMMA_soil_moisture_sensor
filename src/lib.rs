@@ -2,6 +2,7 @@
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::i2c::I2c;
+use defmt::Format;
 
 pub mod error;
 use crate::error::SoilMoistureSensorError;
@@ -140,6 +141,7 @@ where
     }
 }
 
+#[derive(Debug, Format)]
 pub struct Reading {
     pub temperature: f32,
     pub moisture: u16,
