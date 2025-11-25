@@ -14,4 +14,5 @@ categories = ["embedded"]
 
 [dependencies]
 embedded-hal = "1.0.0"
+embedded-hal-async = { version = "1.0.0", optional = false }
 thiserror = { version = "2.0.3", default-features = false }
